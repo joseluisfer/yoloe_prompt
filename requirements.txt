@@ -1,7 +1,7 @@
+runpod
 ultralytics>=8.3.40
-fastapi
-uvicorn
 pillow
 numpy
-python-multipart
+torch
+torchvision
 opencv-python-headless
