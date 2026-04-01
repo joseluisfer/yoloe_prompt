@@ -1,12 +1,12 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from ultralytics import YOLOE
+from ultralytics import YOLOE # Ahora sí, usando la clase oficial de la v8.4
 import numpy as np
 from PIL import Image
 import io
 
 app = FastAPI()
 
-# Cargar modelo al inicio
+# Cargar el modelo YOLOE-X de segmentación
 model = YOLOE("yoloe-26x-seg.pt")
 
 @app.post("/predict")
@@ -14,31 +14,41 @@ async def predict(
     file: UploadFile = File(...),
     text_prompt: str = Form(...)
 ):
-    # Leer imagen
+    # 1. Procesar imagen de la escena
     contents = await file.read()
     img = Image.open(io.BytesIO(contents)).convert("RGB")
+    img_array = np.array(img)
     
-    # Configurar clases
+    # 2. Configurar el vocabulario dinámico (Text Prompt)
+    # YOLOE permite definir qué buscar en tiempo real
     classes = [c.strip() for c in text_prompt.split(",")]
     model.set_classes(classes)
     
-    # Predecir
-    results = model.predict(np.array(img), verbose=False)
+    # 3. Inferencia
+    results = model.predict(img_array, verbose=False)
     
-    # Extraer detecciones
     detections = []
-    if results[0].boxes:
-        boxes = results[0].boxes.xyxy.cpu().numpy()
-        confs = results[0].boxes.conf.cpu().numpy()
-        cls_ids = results[0].boxes.cls.cpu().numpy().astype(int)
-        names = results[0].names
-        
-        for i in range(len(boxes)):
-            detections.append({
-                "class": names[cls_ids[i]],
-                "confidence": float(confs[i]),
-                "bbox": boxes[i].tolist()
-            })
+    if results and len(results) > 0:
+        res = results[0]
+        # Procesar detecciones de segmentación
+        if res.boxes:
+            for i in range(len(res.boxes)):
+                box = res.boxes[i]
+                conf = float(box.conf[0])
+                cls_id = int(box.cls[0])
+                
+                det = {
+                    "class": classes[cls_id] if cls_id < len(classes) else "unknown",
+                    "confidence": round(conf, 4),
+                    "bbox": [round(float(x), 2) for x in box.xyxy[0].tolist()]
+                }
+                
+                # Si quieres incluir la máscara de segmentación:
+                if res.masks:
+                    det["has_mask"] = True
+                    # Aquí podrías codificar res.masks[i].xy a JSON si lo necesitas
+                
+                detections.append(det)
     
     return {"detections": detections}
 
