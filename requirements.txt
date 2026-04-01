@@ -5,3 +5,5 @@ numpy
 torch
 torchvision
 opencv-python-headless
+# ESTAS SON LAS QUE FALTAN:
+git+https://github.com/openai/CLIP.git
